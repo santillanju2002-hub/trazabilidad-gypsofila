@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trazabilidad Gypsofila</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧫 Trazabilidad de lotes — Gypsofila</h1>
+  <div class="sub" id="subtitle">Registro in vitro con código por lote y código QR escaneable</div>
+
+  <div class="card" id="configWarning" style="display:none;background:#fdeae2;border-color:#e2a287;">
+    <strong>⚠ Falta configurar la conexión.</strong><br>
+    Abre este archivo con un editor de texto, busca <code>API_URL</code> cerca del inicio del
+    <code>&lt;script&gt;</code>, y pega ahí la URL de tu Apps Script (ver instrucciones en
+    <code>CodigoAppsScript.gs</code>).
+  </div>
+
+  <div id="detailView" style="display:none;"></div>
+
+  <div id="listView">
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:10px;">Registrar nuevo lote</div>
+      <div class="row">
+        <div class="field">
+          <label>Tipo de explante</label>
+          <select id="f_explante">
+            <option>Segmento nodal</option>
+            <option>Yema apical</option>
+            <option>Hoja</option>
+            <option>Tallo</option>
+            <option>Semilla</option>
+            <option>Callo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Fecha de siembra</label>
+          <input type="date" id="f_fecha">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Procedencia / planta madre</label>
+          <input type="text" id="f_proc" placeholder="Ej. Planta madre invernadero #3">
+        </div>
+        <div class="field">
+          <label>Medio / tratamiento</label>
+          <input type="text" id="f_medio" placeholder="Ej. MS + BAP 1.0 mg/L">
+        </div>
+      </div>
+      <div class="field">
+        <label>Notas (opcional)</label>
+        <input type="text" id="f_notas" placeholder="Observaciones iniciales">
+      </div>
+      <button class="btn-primary" id="btnAdd">+ Registrar lote y generar código</button>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-weight:700;">Lotes registrados</div>
+        <button class="btn-ghost btn-small" id="btnRefresh">↻ Actualizar</button>
+      </div>
+      <div id="lots"><div class="empty">Cargando…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="labelOverlay">
+  <div class="modal">
+    <div style="font-weight:700;font-size:15px;" id="label_code"></div>
+    <div class="meta" id="label_meta"></div>
+    <div id="qrbox"></div>
+    <div style="font-size:11px;color:var(--muted);word-break:break-all;" id="label_url"></div>
+    <div class="lot-actions" style="justify-content:center;margin-top:14px;">
+      <button class="btn-ghost btn-small" id="btnPrint">🖨️ Imprimir etiqueta</button>
+      <button class="btn-ghost btn-small" id="btnCloseLabel">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+:root{
+  --bg:#f6f8f6; --card:#ffffff; --ink:#1d2b1f; --muted:#6b7a6d; --line:#dfe6e0;
+  --accent:#3f6b4a; --accent-ink:#ffffff; --warn:#b3471e; --warn-bg:#fdeae2;
+  --ok-bg:#e4f1e6; --chip-bg:#eef2ee;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+.wrap{max-width:640px;margin:0 auto;padding:16px 16px 48px;}
+h1{font-size:19px;margin:4px 0 2px;}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px;}
+.field{flex:1 1 140px;margin-bottom:10px;}
+button{cursor:pointer;border:none;border-radius:9px;padding:10px 14px;font-size:14px;font-weight:600;}
+.btn-primary{background:var(--accent);color:var(--accent-ink);width:100%;}
+.btn-ghost{background:var(--chip-bg);color:var(--ink);}
+.btn-small{padding:6px 10px;font-size:12px;}
+.lot{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--bg);}
+.lot-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+.code{font-weight:700;font-family:monospace;font-size:15px;}
+.chip{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;background:var(--chip-bg);color:var(--muted);}
+.chip.ok{background:var(--ok-bg);color:var(--accent);}
+.chip.warn{background:var(--warn-bg);color:var(--warn);}
+.meta{color:var(--muted);font-size:12.5px;margin:6px 0;}
+.lot-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;}
+.lot-actions select{width:auto;flex:1 1 130px;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;}
+.overlay.open{display:flex;}
+.modal{background:var(--card);border-radius:16px;padding:20px;max-width:340px;width:100%;text-align:center;}
+#qrbox{display:flex;justify-content:center;margin:12px 0;}
+#qrbox img, #qrbox canvas, #qrbox table{background:#fff;padding:8px;border-radius:8px;}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-size:13px;text-decoration:none;margin-bottom:10px;cursor:pointer;background:none;border:none;padding:0;font-weight:600;}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:20px 0;}
+@media print{
+  body.printing-label > *:not(#labelOverlay){display:none!important;}
+  #labelOverlay{position:static!important;background:none!important;display:flex!important;}
+}
+</style>
+
+<script>
+/* ============================================================
+   PEGA AQUÍ LA URL DE TU APPS SCRIPT (entre las comillas):
+   Ejemplo: "https://script.google.com/macros/s/AKfycbx.../exec"
+   ============================================================ */
+const CONFIG = {
+  API_URL: "https://script.google.com/macros/s/AKfycbxrAr-BJbx2xJrqCBcWggrDs3XnopdLheROt8AtrVwe0U2F7ttJKJm9RkZESWgaGw/exec"
+};
+
+const ESTADOS = ["En cultivo","Contaminado","Multiplicado","Enraizado","Aclimatado","Perdido/Descartado"];
+const configured = () => CONFIG.API_URL && CONFIG.API_URL.indexOf("http") === 0;
+
+function fmtDate(iso){
+  if(!iso) return "—";
+  const d = new Date(iso+"T00:00:00");
+  return d.toLocaleDateString("es-EC",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+function diasEnCultivo(iso){
+  if(!iso) return "—";
+  const ms = Date.now() - new Date(iso+"T00:00:00").getTime();
+  return Math.max(0, Math.floor(ms/86400000));
+}
+function baseUrl(){ return location.origin + location.pathname; }
+function codeUrl(code){ return baseUrl() + "?code=" + encodeURIComponent(code); }
+
+async function apiList(){
+  const r = await fetch(CONFIG.API_URL + "?action=list");
+  const j = await r.json();
+  return j.lots || [];
+}
+async function apiGet(code){
+  const r = await fetch(CONFIG.API_URL + "?action=get&code=" + encodeURIComponent(code));
+  const j = await r.json();
+  return j.lot || null;
+}
+async function apiAdd(payload){
+  const r = await fetch(CONFIG.API_URL, { method:"POST", body: JSON.stringify(Object.assign({action:"add"}, payload)) });
+  return r.json();
+}
+async function apiUpdate(code, patch){
+  const r = await fetch(CONFIG.API_URL, { method:"POST", body: JSON.stringify({action:"update", code, patch}) });
+  return r.json();
+}
+
+function lotCardHTML(d){
+  const id = d.code;
+  const estado = d.estado || "En cultivo";
+  const contaminado = (d.contaminado === true || d.contaminado === "true" || d.contaminado === "TRUE");
+  const chipClass = estado==="Contaminado" ? "warn" : (estado==="Perdido/Descartado" ? "" : "ok");
+  const opts = ESTADOS.map(e => `<option value="${e}" ${e===estado?"selected":""}>${e}</option>`).join("");
+  return `
+  <div class="lot" data-id="${id}">
+    <div class="lot-top">
+      <span class="code">${id}</span>
+      <span class="chip ${chipClass}">${estado}</span>
+    </div>
+    <div class="meta">${d.explante||"—"} · siembra ${fmtDate(d.fecha)} · ${diasEnCultivo(d.fecha)} días en cultivo</div>
+    ${d.procedencia ? `<div class="meta">Procedencia: ${d.procedencia}</div>` : ""}
+    ${d.medio ? `<div class="meta">Medio: ${d.medio}</div>` : ""}
+    ${d.notas ? `<div class="meta">Notas: ${d.notas}</div>` : ""}
+    <div class="lot-actions">
+      <select class="sel-estado">${opts}</select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);">
+        <input type="checkbox" class="chk-contam" ${contaminado?"checked":""}> contaminado
+      </label>
+      <button class="btn-ghost btn-small btn-qr">Código QR</button>
+    </div>
+  </div>`;
+}
+
+function wireCard(card, onChange){
+  const id = card.dataset.id;
+  card.querySelector(".sel-estado").addEventListener("change", async e=>{
+    await apiUpdate(id, {estado:e.target.value});
+    if(onChange) onChange();
+  });
+  card.querySelector(".chk-contam").addEventListener("change", async e=>{
+    await apiUpdate(id, {contaminado:e.target.checked});
+    if(onChange) onChange();
+  });
+  card.querySelector(".btn-qr").addEventListener("click", ()=> openLabel(id, card));
+}
+
+async function renderList(){
+  const el = document.getElementById("lots");
+  let docs;
+  try{ docs = await apiList(); }
+  catch(e){ el.innerHTML = '<div class="empty">No se pudo conectar con la base de datos.</div>'; return; }
+  if(!docs.length){ el.innerHTML = '<div class="empty">Aún no hay lotes registrados.</div>'; return; }
+  docs.sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  el.innerHTML = docs.map(d => lotCardHTML(d)).join("");
+  el.querySelectorAll(".lot").forEach(card => wireCard(card, renderList));
+}
+
+function openLabel(id, cardEl){
+  document.getElementById("label_code").textContent = id;
+  const metaText = cardEl ? (cardEl.querySelector(".meta")?.textContent || "") : "";
+  document.getElementById("label_meta").textContent = metaText;
+  const url = codeUrl(id);
+  document.getElementById("label_url").textContent = url;
+  const box = document.getElementById("qrbox");
+  box.innerHTML = "";
+  try{
+    if(typeof QRCode === "undefined") throw new Error("lib not loaded");
+    new QRCode(box, { text:url, width:180, height:180, colorDark:"#000000", colorLight:"#ffffff", correctLevel: QRCode.CorrectLevel.M });
+  }catch(e){
+    box.innerHTML = '<div style="font-family:monospace;font-size:13px;color:var(--muted);padding:20px 0;">⚠ No se pudo generar el QR.<br>Código: '+id+'<br>Link: '+url+'</div>';
+  }
+  document.getElementById("labelOverlay").classList.add("open");
+}
+document.getElementById("btnCloseLabel").addEventListener("click", ()=> document.getElementById("labelOverlay").classList.remove("open"));
+document.getElementById("btnPrint").addEventListener("click", ()=>{
+  document.body.classList.add("printing-label");
+  window.print();
+  setTimeout(()=> document.body.classList.remove("printing-label"), 300);
+});
+document.getElementById("btnRefresh").addEventListener("click", renderList);
+
+document.getElementById("f_fecha").valueAsDate = new Date();
+
+document.getElementById("btnAdd").addEventListener("click", async ()=>{
+  if(!configured()){ alert("Primero configura CONFIG.API_URL (ver instrucciones arriba)."); return; }
+  const fecha = document.getElementById("f_fecha").value;
+  if(!fecha){ alert("Elige la fecha de siembra"); return; }
+  const btn = document.getElementById("btnAdd");
+  btn.disabled = true; btn.textContent = "Generando código…";
+  try{
+    const payload = {
+      explante: document.getElementById("f_explante").value,
+      fecha: fecha,
+      procedencia: document.getElementById("f_proc").value,
+      medio: document.getElementById("f_medio").value,
+      notas: document.getElementById("f_notas").value
+    };
+    const res = await apiAdd(payload);
+    if(res.ok){
+      document.getElementById("f_proc").value = "";
+      document.getElementById("f_medio").value = "";
+      document.getElementById("f_notas").value = "";
+      await renderList();
+      const card = document.querySelector(`.lot[data-id="${res.code}"]`);
+      openLabel(res.code, card);
+    } else {
+      alert("No se pudo guardar: " + (res.error||""));
+    }
+  }catch(e){
+    alert("Error de conexión al guardar el lote.");
+  }
+  btn.disabled = false; btn.textContent = "+ Registrar lote y generar código";
+});
+
+async function renderDetail(id){
+  document.getElementById("listView").style.display = "none";
+  const el = document.getElementById("detailView");
+  el.style.display = "block";
+  let d;
+  try{ d = await apiGet(id); }catch(e){ d = null; }
+  if(!d){
+    el.innerHTML = `<button class="back" id="btnBack">← Ver todos los lotes</button>
+      <div class="card empty">No se encontró el lote "${id}".</div>`;
+    document.getElementById("btnBack").addEventListener("click", goToList);
+    return;
+  }
+  el.innerHTML = `<button class="back" id="btnBack">← Ver todos los lotes</button>
+    <div class="card">${lotCardHTML(d)}</div>`;
+  document.getElementById("btnBack").addEventListener("click", goToList);
+  wireCard(el.querySelector(".lot"), ()=> renderDetail(id));
+}
+
+function goToList(){
+  history.pushState({}, "", baseUrl());
+  document.getElementById("detailView").style.display = "none";
+  document.getElementById("listView").style.display = "block";
+  renderList();
+}
+
+async function init(){
+  if(!configured()){
+    document.getElementById("configWarning").style.display = "block";
+    document.getElementById("lots").innerHTML = '<div class="empty">Configura la conexión primero.</div>';
+    return;
+  }
+  const params = new URLSearchParams(location.search);
+  const code = params.get("code");
+  if(code){
+    await renderDetail(code);
+  } else {
+    await renderList();
+  }
+}
+init();
+</script>
+</body>
+</html>
